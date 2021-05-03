@@ -1,0 +1,109 @@
+# hashcat Dockerfile for Anaconda with Jupyter Notebooks
+# Copyright (C) 2020, 2021  Chelsea E. Manning
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+FROM xychelsea/anaconda3:v0.3
+LABEL description="Hashcat GPU Container w/ Jupyter Notebooks"
+
+# $ docker build --network=host -t xychelsea/hashcat:latest-gpu-jupyter -f Dockerfile.nvidia-jupyter .
+# # $ docker run --rm -it -d -p 8888:8888 xychelsea/hashcat:latest-gpu-jupyter
+# # $ docker push xychelsea/hashcat:latest-gpu-jupyter
+
+ENV ANACONDA_ENV=hashcat
+ENV HASHCAT_VERSION=v6.1.1
+ENV HASHCAT_UTILS_VERSION=v1.9
+ENV HCXTOOLS_VERSION=6.0.2
+ENV HCXDUMPTOOL_VERSION=6.0.6
+ENV HCXKEYS_VERSION=master
+
+# Start as root
+USER root
+
+# Update packages
+RUN apt-get update --fix-missing \
+    && apt-get -y upgrade \
+    && apt-get -y dist-upgrade
+
+# Install dependencies
+RUN apt-get -y install \
+    build-essential \
+    clinfo \
+    git \
+    libcurl4-openssl-dev \
+    libglu1-mesa-dev \
+    libssl-dev \
+    make \
+    wget \
+    zlib1g-dev
+
+# Switch to user "anaconda"
+USER ${ANACONDA_UID}
+WORKDIR ${HOME}
+
+# Update Anaconda
+RUN conda update -c defaults conda
+
+# Install hashcat
+RUN conda create -c conda-forge -n hashcat \
+    && rm -rvf ${ANACONDA_PATH}/share/jupyter/lab/staging
+
+# Switch back to root
+USER root
+
+RUN git clone https://github.com/hashcat/hashcat.git \
+    && cd hashcat && git checkout ${HASHCAT_VERSION} \
+    && make install -j4
+
+RUN git clone https://github.com/hashcat/hashcat-utils.git \
+    && cd hashcat-utils/src \
+    && git checkout ${HASHCAT_UTILS_VERSION} \
+    && make
+
+RUN ln -s /root/hashcat-utils/src/cap2hccapx.bin /usr/bin/cap2hccapx
+
+RUN git clone https://github.com/ZerBea/hcxtools.git \
+    && cd hcxtools \
+    && git checkout ${HCXTOOLS_VERSION} \
+    && make install
+
+RUN git clone https://github.com/ZerBea/hcxdumptool.git \
+    && cd hcxdumptool \
+    && git checkout ${HCXDUMPTOOL_VERSION} \
+    && make install
+
+RUN git clone https://github.com/hashcat/kwprocessor.git \
+    && cd kwprocessor \
+    && git checkout ${HCXKEYS_VERSION} \
+    && make
+
+RUN ln -s /root/kwprocessor/kwp /usr/bin/kwp
+
+# Clean Anaconda
+RUN conda clean -afy
+
+# Clean packages and caches
+RUN apt-get --purge -y autoremove \
+        build-essential \
+        git \
+        make \
+        wget \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
+    && rm -rvf /home/${ANACONDA_PATH}/.cache/yarn \
+    && fix-permissions ${HOME} \
+    && fix-permissions ${ANACONDA_PATH}
+
+# Re-activate user "anaconda"
+USER $ANACONDA_UID
+WORKDIR $HOME
