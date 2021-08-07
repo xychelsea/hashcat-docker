@@ -14,12 +14,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-FROM xychelsea/anaconda3:v0.3-jupyter
-LABEL description="Hashcat Vanilla Container w/ Jupyter Notebooks"
+FROM xychelsea/anaconda3:v0.4.1-gpu
+LABEL description="Hashcat GPU Container"
 
-# $ docker build --network=host -t xychelsea/hashcat:latest-jupyter -f Dockerfile.jupyter .
-# # $ docker run --rm -it -d -p 8888:8888 xychelsea/hashcat:latest-jupyter
-# # $ docker push xychelsea/hashcat:latest-jupyter
+# $ docker build --network=host -t xychelsea/hashcat:latest-gpu -f Dockerfile.jupyter .
+# # $ docker run --rm -it xychelsea/hashcat:latest-gpu /bin/bash
+# # $ docker push xychelsea/hashcat:latest-gpu
 
 ENV ANACONDA_ENV=hashcat
 ENV HASHCAT_VERSION=v6.1.1
@@ -46,7 +46,8 @@ RUN apt-get -y install \
     libssl-dev \
     make \
     wget \
-    zlib1g-dev
+    zlib1g-dev \
+    && conda clean -afy
 
 # Switch to user "anaconda"
 USER ${ANACONDA_UID}
@@ -56,7 +57,7 @@ WORKDIR ${HOME}
 RUN conda update -c defaults conda
 
 # Install hashcat
-RUN conda create -c conda-forge -n hashcat \
+RUN conda create -n ${ANACONDA_ENV} -c conda-forge \
     && rm -rvf ${ANACONDA_PATH}/share/jupyter/lab/staging
 
 # Switch back to root
@@ -95,10 +96,10 @@ RUN conda clean -afy
 
 # Clean packages and caches
 RUN apt-get --purge -y autoremove \
-        build-essential \
-        git \
-        make \
-        wget \
+    build-essential \
+    git \
+    make \
+    wget \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
     && rm -rvf /home/${ANACONDA_PATH}/.cache/yarn \
     && fix-permissions ${HOME} \
